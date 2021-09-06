@@ -356,6 +356,7 @@ batless barry is already a very good player, but this could put him over the
 edge.
 335 plate appearances left for when barry put the ball in play.
 we change our simulation function once again to account for all outcomes.
+
 |letter|meaning|what to do with it|
 |---|---|---|
 |C|called strike|leave as is|
