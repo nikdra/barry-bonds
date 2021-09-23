@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 a recreation of [What if Barry Bonds had played without a baseball bat? | Chart Party](https://www.youtube.com/watch?v=JwMfT2cZGHg&ab_channel=SecretBase)
 
-## setup
+# setup
 
 so this is actually one of the more tedious parts. 
 getting data from [retrosheet](https://www.retrosheet.org/) was kinda difficult 
@@ -35,6 +35,9 @@ season.pbp <- read.csv("data/all2004.csv", header = FALSE)
 # and only the pitch sequences and results to save some memory
 barry <- season.pbp[season.pbp$V11=="bondb001" & season.pbp$V36 == TRUE, 
                     c("V8", "V30")]
+
+# a copy of barry, we'll need it later
+barry_copy <- barry
 
 # seems to be correct
 print(nrow(barry))
@@ -64,12 +67,12 @@ obp <- function() {
 set.seed(1)
 ```
 
-## walks and hit by pitches
+# walks and hit by pitches
 
 despite what the title says, i'll keep the structure of the video. 
 beaned barry comes first, then intentional walks, then walks where barry swung.
 
-### hit by pitches
+## hit by pitches
 
 we don't really care about them. jon just counts them as a walk, so i will too.
 we can find them in our data as pitch sequences that end in "H".
@@ -135,7 +138,7 @@ print(obp())
 and now barry has a .209 obp. 
 what a machine.
 
-# real walks
+### real walks
 
 okay, now let's take a look at the remaining walks and put them in our 
 barry bonds batless simulator.
@@ -146,13 +149,25 @@ sequence mean.
 
 |letter|meaning|what to do with it|
 |---|---|---|
-|C|called strike|leave as is|
-|S|swinging strike|leave as is|
-|B|ball|leave as is|
+|B|ball|ball|
+|C|called strike|strike|
 |F|foul|simulate|
-|T|foul tip|strike|
+|H|hit batter|walk|
+|I|intentional ball|ball|
+|K|strike (unknown type)|strike|
+|L|foul bunt|simulate|
+|M|missed bunt attempt|simulate|
+|N|no pitch (on balks and interference calls)|walk|
+|O|foul tip on bunt|simulate|
+|P|pitchout|ball|
+|Q|swinging on pitchout|ball|
+|R|foul ball on pitchout|ball|
+|S|swinging strike|simulate|
+|T|foul tip|simulate|
+|U|unknown or missed pitch|skip|
+|V|called ball because pitcher went to his mouth|ball|
 
-a foul ball (F) has a 19.1% chance of being a strike. 
+a simulated ball has a 19.1% chance of being a strike. 
 note that this can only _remove_ walks, and we will never run out of pitches to
 simulate.
 
@@ -176,44 +191,40 @@ print(nrow(walks))
 
 ```{r}
 # the walk simulation function.
-# if a walk pitch sequence has an "F" in it, simulate it.
 # return true if it's a walk, false otherwise.
-# return true otherwise.
 # i know we could cut some corners here, but i don't want to right now.
 walk_sim <- function(pitch_sequence) {
-  if (grepl("F", pitch_sequence)) {
-    # strike and ball counter
-    balls <- 0
-    strikes <- 0
-    # iterate through the sequence
-    for (i in strsplit(pitch_sequence,"")[[1]]) {
-      # we got a foul ball
-      if (i == "F") {
-        # generate random number between 1 and 1000
-        r <- runif(n = 1, min = 1, max = 1000)
-        # ball
-        if (r < 192) {
-          balls <- balls + 1
-        } else {
-          # strike
-          strikes <- strikes + 1
-        }
-      } else if (i %in% c("S", "C", "T")) {
-        # called or swinging strike
-        strikes <- strikes + 1
-      } else if (i == "B") {
-        # ball
+  # strike and ball counter
+  balls <- 0
+  strikes <- 0
+  # iterate through the sequence
+  for (i in strsplit(pitch_sequence,"")[[1]]) {
+    # we got a simulated ball
+    if (i %in% c("F","L","M","O","S","T")) {
+      # generate random number between 1 and 1000
+      r <- runif(n = 1, min = 1, max = 1000)
+      # ball
+      if (r < 192) {
         balls <- balls + 1
+      } else {
+        # strike
+        strikes <- strikes + 1
       }
-      # check if we're done
-      if (balls == 4) {
-        return(TRUE)
-      } else if (strikes == 3) {
-        return(FALSE)
-      }
+    } else if (i %in% c("C","K")) {
+      # called strike, unknown strike
+      strikes <- strikes + 1
+    } else if (i %in% c("B", "I", "Q", "P", "Q", "R","V")) {
+      # ball
+      balls <- balls + 1
+    } else if (i == "N") {
+      return(TRUE)
     }
-  } else {
-    return(TRUE)
+    # check if we're done
+    if (balls == 4) {
+      return(TRUE)
+    } else if (strikes == 3) {
+      return(FALSE)
+    }
   }
 }
 ```
@@ -243,7 +254,7 @@ print(obp())
 
 oh boy.
 
-## strikeouts
+# strikeouts
 
 how often did barry bonds strike out in 2004?
 
@@ -262,60 +273,56 @@ in this case, the pitch is a strike 41.3% of the time.
 
 ```{r}
 # the strikeout simulation function.
-# if a strikeout pitch sequence has an "F" in it, simulate it.
 # return true if it's a walk, false otherwise.
-# return true otherwise.
 # i know we could cut some corners here, but i don't want to right now.
 k_sim <- function(pitch_sequence) {
-  if (grepl("F", pitch_sequence)) {
-    # strike and ball counter
-    balls <- 0
-    strikes <- 0
-    # iterate through the sequence
-    for (i in strsplit(pitch_sequence,"")[[1]]) {
-      # we got a foul ball
-      if (i == "F") {
-        # generate random number between 1 and 1000
-        r <- runif(n = 1, min = 1, max = 1000)
-        # ball
-        if (r < 192) {
-          balls <- balls + 1
-        } else {
-          # strike
-          strikes <- strikes + 1
-        }
-      } else if (i %in% c("S", "C", "T")) {
-        # called or swinging strike
-        strikes <- strikes + 1
-      } else if (i == "B") {
-        # ball
-        balls <- balls + 1
-      }
-      # check if we're done
-      if (balls == 4) {
-        return(TRUE)
-      } else if (strikes == 3) {
-        return(FALSE)
-      }
-    }
-    # if we're here, we gotta get some more random numbers
-    while (TRUE) {
+  # strike and ball counter
+  balls <- 0
+  strikes <- 0
+  # iterate through the sequence
+  for (i in strsplit(pitch_sequence,"")[[1]]) {
+    # we got a simulated ball
+    if (i %in% c("F","L","M","O","S","T")) {
+      # generate random number between 1 and 1000
       r <- runif(n = 1, min = 1, max = 1000)
-      if (r < 588) {
+      # ball
+      if (r < 192) {
         balls <- balls + 1
-      }
-      else {
+      } else {
+        # strike
         strikes <- strikes + 1
       }
-      # check if we're done
-      if (balls == 4) {
-        return(TRUE)
-      } else if (strikes == 3) {
-        return(FALSE)
-      }
+    } else if (i %in% c("C","K")) {
+      # called strike, unknown strike
+      strikes <- strikes + 1
+    } else if (i %in% c("B", "I", "Q", "P", "Q", "R","V")) {
+      # ball
+      balls <- balls + 1
+    } else if (i == "N") {
+      return(TRUE)
     }
-  } else {
-    return(TRUE)
+    # check if we're done
+    if (balls == 4) {
+      return(TRUE)
+    } else if (strikes == 3) {
+      return(FALSE)
+    }
+  }
+  # if we're here, we gotta get some more random numbers
+  while (TRUE) {
+    r <- runif(n = 1, min = 1, max = 1000)
+    if (r < 588) {
+      balls <- balls + 1
+    }
+    else {
+      strikes <- strikes + 1
+    }
+    # check if we're done
+    if (balls == 4) {
+      return(TRUE)
+    } else if (strikes == 3) {
+      return(FALSE)
+    }
   }
 }
 ```
@@ -347,39 +354,39 @@ a couple more walks.
 obp()
 ```
 
-is a .392 obp good?
+is a .377 obp good?
 
-## balls in play
+# balls in play
 
 the meat of the piece. 
 batless barry is already a very good player, but this could put him over the
 edge.
 335 plate appearances left for when barry put the ball in play.
 we change our simulation function once again to account for all outcomes.
+only two more letters in the pitch sequence have to be accounted for.
 
 |letter|meaning|what to do with it|
 |---|---|---|
-|C|called strike|leave as is|
-|S|swinging strike|leave as is|
-|B|ball|leave as is|
-|F|foul|simulate|
-|T|foul tip|strike|
-|X|ball put into play by batter|strike|
+|X|ball put into play by batter|simulate|
+|Y|ball put into play on pitchout|ball|
+
+see, we could've done all of our work in one function from the get-go, but 
+i wanted to show you how to construct this piece-by-piece.
+furthermore, this allowed me to show you the results like in the video.
+and that's the reason why this last function is called `full_sim`.
 
 ```{r}
 # the ball in play simulation function.
-# if a strikeout pitch sequence has an "F" in it, simulate it.
 # return true if it's a walk, false otherwise.
-# return true otherwise.
 # i know we could cut some corners here, but i don't want to right now.
-bip_sim <- function(pitch_sequence) {
+full_sim <- function(pitch_sequence) {
   # strike and ball counter
   balls <- 0
   strikes <- 0
   # iterate through the sequence
   for (i in strsplit(pitch_sequence,"")[[1]]) {
-    # we got a foul ball
-    if (i == "F") {
+    # we got a simulated ball
+    if (i %in% c("F","L","M","O","S","T","X")) {
       # generate random number between 1 and 1000
       r <- runif(n = 1, min = 1, max = 1000)
       # ball
@@ -389,12 +396,15 @@ bip_sim <- function(pitch_sequence) {
         # strike
         strikes <- strikes + 1
       }
-    } else if (i %in% c("S", "C", "X", "T")) {
-      # called or swinging strike or ball in play
+    } else if (i %in% c("C","K")) {
+      # called strike, unknown strike
       strikes <- strikes + 1
-    } else if (i == "B") {
+    } else if (i %in% c("B","I","Q","P","Q","R","V","Y")) {
       # ball
       balls <- balls + 1
+    } else if (i %in% c("H","N")) {
+      # hbp or balk - automatic walks
+      return(TRUE)
     }
     # check if we're done
     if (balls == 4) {
@@ -429,7 +439,7 @@ okay, let's see what happens.
 bip <- barry$V8
 
 # simulate balls in play
-bip_to_walk <- sum(sapply(bip, bip_sim))
+bip_to_walk <- sum(sapply(bip, full_sim))
 
 # how many balls in play turned into walks?
 print(bip_to_walk)
@@ -440,44 +450,23 @@ bb <- bb + bip_to_walk
 # output final obp
 print(obp())
 ```
-a .552 obp. 
-that's impressive, but not what jon got. 
+a .606 obp. 
+that's impressive, but not _quite_ what jon got. 
 fortunately for us, we have automated the process, so we can pack this into
 one big ugly function and run this as often as we like.
 
-## turn on the bullshit machine
+# turn on the bullshit machine
 
 so we do what we said we would do. 
-cram it all into one function.
+cram it all into one function for simulation.
+that's where our barry copy will come in. 
+we use the last function we described and put it into the simulator.
 
 ```{r}
-barry_bonds_without_a_bat <- function() {
-  # number of walks so far - ibb already accounted for
-  bb <- length(ibb_ind)
-  # number of hbp - they are static
-  hbp <- 9
-  # number of plate appearances
-  pa <- 617
-  
-  # start of simulation: walks
-  simulated_walks <- sum(sapply(walks$V8, walk_sim))
-  
-  # add them to our walk counter
-  bb <- simulated_walks + bb
-  
-  # simulate the strikeouts
-  k_to_walk <- sum(sapply(ks$V8, k_sim))
-  
-  # add them to what we have
-  bb <- bb + k_to_walk
+barry_bonds_without_a_bat <- function(pbp) {
+  onbase <- sum(sapply(pbp, full_sim))
 
-  # simulate balls in play
-  bip_to_walk <- sum(sapply(bip, bip_sim))
-  
-  # add them to our total
-  bb <- bb + bip_to_walk
-
-  return((bb + hbp)/pa)
+  return((onbase)/length(pbp))
 }
 ``` 
 
@@ -485,36 +474,44 @@ and now for the grand finale.
 throw on the simulation simulator.
 
 ```{r}
-# simulate jon's simulation 10000 times
-barrys <- replicate(10000, barry_bonds_without_a_bat())
+# simulate jon's simulation N=10000 times
+N <- 10000
+set.seed(1)
+barrys <- replicate(N, barry_bonds_without_a_bat(barry_copy$V8))
 ```
 
-what happens when we visualize the on base percentages in a histogram?
+what happens when we visualize the on-base percentages in a histogram?
 
 ```{r}
 hist(barrys)
 ```
+so batless barry has a pretty good shot at being the player with the highest 
+obp in history.
+we ran this simulation 10000 times, and more often than not batless barry is
+better than his 2003 self in terms of on-base percentage.
 
-we ran this 10000 times, and only 
+# post script
+
+so i found this [reddit post](https://www.reddit.com/r/Jon_Bois/comments/96ek89/barry_bonds_without_a_bat_revisited_looks_like/) by u/cg2916 after i wrote this.
+they took more than 5 minutes to read the retrosheet documentation.
+this helped me find some errors in my calculations. 
+they claim that there's a 67.6% chance that batless barry gets the obp record.
+we can put that claim to the test:
 ```{r}
-sum(barrys > 0.600)
+sum(barrys > 0.5817)/N
 ```
-_twice_ barry had an obp above 600.
-
-the best barry had an obp of
-
+additionally, they claim that barry has a 3.1% chance of beating his actual obp
+that year, which was 0.6094:
 ```{r}
-max(barrys)
+sum(barrys > 0.6094)/N
 ```
-.604. 
+uh maybe not? 
+it's higher?
 maybe i made a mistake. 
 or maybe not. 
 who knows. 
 what does it say about me that i spent an afternoon reverse engineering this?
 nothing good
-
-
-
 
 
 
